@@ -1,0 +1,42 @@
+name: playwright-mcp-service
+
+# Network shared with the upstream playwright-mcp container. Other compose
+# stacks shouldn't need to join — they go through the public OIDC-protected
+# URL like any other MCP client.
+networks:
+  default:
+    name: playwright-mcp-net
+
+services:
+  playwright:
+    container_name: playwright-mcp-upstream
+    image: mcr.microsoft.com/playwright/mcp
+    restart: unless-stopped
+    entrypoint: node
+    command:
+      - /app/cli.js
+      - --headless
+      - --browser
+      - chromium
+      - --no-sandbox
+      - --port
+      - "8931"
+      - --host
+      - 0.0.0.0
+    expose:
+      - "8931"
+    # Not published — only the OIDC proxy talks to it.
+
+  proxy:
+    container_name: playwright-mcp-proxy
+    build: .
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        format: raw
+    ports:
+      # External TLS termination (Cloudflare Tunnel, Traefik, Caddy, nginx,
+      # etc.) is expected to route the public hostname here.
+      - "8929:8929"
+    depends_on:
+      - playwright

@@ -83,10 +83,47 @@ Okta, Google, and any other standards-compliant OIDC implementation.
 That's it. The proxy will fetch your IdP's discovery document on startup
 and start enforcing auth on every MCP call.
 
+## Authentication modes
+
+The proxy serves two parallel auth paths on the same `/mcp` endpoint:
+
+| Mode            | When to use                                | How                              |
+|-----------------|--------------------------------------------|----------------------------------|
+| **OAuth (OIDC)**| Interactive clients (Claude Code, IDEs)    | Browser-based flow via your IdP  |
+| **Machine key** | Headless callers (cron, CI, containers)    | Static `Authorization: Bearer …` |
+
+Each is independently configurable:
+
+- **OAuth is always on** when `AUTH_SERVER_URL` / `CLIENT_SECRET` are set
+  (the normal deploy).
+- **Machine key is opt-in.** Set `MACHINE_API_KEY` in `.env` to enable it;
+  leave it unset to disable. The proxy refuses to start with a key shorter
+  than 32 characters so a typo can't silently weaken auth.
+
+Both paths can be enabled at the same time — a request's bearer is first
+compared (constant-time) against the machine key; if it doesn't match,
+it's verified against the IdP. Neither mode disables the other.
+
+### Tradeoffs of the machine key
+
+The machine key bypasses your IdP entirely, which is its point — and its
+cost:
+
+- **No per-user identity.** Every machine caller is the same principal.
+- **No clock-based expiry.** The key is valid until you rotate it.
+- **Not revocable via your IdP.** The secret itself is the access control.
+- **Rotation is manual:** edit `.env`, restart the proxy, update every
+  machine client.
+
+So: prefer OAuth wherever a human is in the loop, and use the machine key
+only where a browser-based flow genuinely doesn't fit.
+
 ## Consuming from a client
 
-Any MCP client that supports HTTP transport + OAuth works. Example client
-config (Claude Code's JSON shape):
+Any MCP client that supports HTTP transport works. Two config shapes,
+depending on which mode the client is using.
+
+**OAuth (interactive)** — Claude Code's JSON shape:
 
 ```json
 {
@@ -102,6 +139,20 @@ config (Claude Code's JSON shape):
 On first connect the client walks the OAuth flow against your IdP (a
 browser window opens for login). The token is cached locally — subsequent
 headless runs reuse it until it expires.
+
+**Machine key (headless)** — same endpoint, static bearer:
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "http",
+      "url": "https://playwright-mcp.example.com/mcp",
+      "headers": {"Authorization": "Bearer <MACHINE_API_KEY>"}
+    }
+  }
+}
+```
 
 ## Notes
 

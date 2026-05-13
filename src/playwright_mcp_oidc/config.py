@@ -1,4 +1,4 @@
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +18,21 @@ class Settings(BaseSettings):
 
     server_host: str = Field(alias="SERVER_HOST", default="0.0.0.0")
     server_port: int = Field(alias="SERVER_PORT", default=8929)
+
+    machine_api_key: str | None = Field(alias="MACHINE_API_KEY", default=None)
+
+    @field_validator("machine_api_key")
+    @classmethod
+    def _validate_machine_api_key(cls, v: str | None) -> str | None:
+        # Empty/None disables the machine-key auth path entirely.
+        if not v:
+            return None
+        if len(v) < 32:
+            raise ValueError(
+                "MACHINE_API_KEY must be at least 32 characters when set. "
+                "Generate one with: openssl rand -base64 32"
+            )
+        return v
 
     @property
     def required_scopes(self) -> list[str]:

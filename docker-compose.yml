@@ -23,6 +23,11 @@ services:
       - "8931"
       - --host
       - 0.0.0.0
+      # Accept the docker-network hostname the proxy uses to reach us.
+      # Without this the upstream rejects with 403 (default allowed-hosts
+      # is just the bind address, which doesn't match "playwright:8931").
+      - --allowed-hosts
+      - playwright
     expose:
       - "8931"
     # Not published — only the OIDC proxy talks to it.
